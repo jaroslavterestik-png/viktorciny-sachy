@@ -7,7 +7,7 @@
     <title>Viktorčiny šachy</title>
 
     <!-- chess.js – UMD verze (funguje s new Chess()) -->
-    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/chess.js@0.10.3/chess.min.js"></script>
 
     <style>
         :root {
@@ -398,6 +398,11 @@
 </div>
 
 <script>
+    // Bezpečnostní kontrola – pokud chess.js není dostupný, ukážeme hlášku
+    if (typeof Chess === 'undefined') {
+        alert('Nepodařilo se načíst šachovou logiku (chess.js). Zkontroluj připojení k internetu.');
+    }
+
     const PIECE_SYMBOLS = {
         w: {k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙'},
         b: {k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟'}
@@ -445,8 +450,10 @@
         timeOut: false,
 
         init() {
+            if (typeof Chess === 'undefined') return; // chess.js se nenačetl
+
             this.boardEl = document.getElementById('board');
-            this.chess = new Chess(); // z chess.js UMD
+            this.chess = new Chess(); // z chess.js
             this.generateBoard();
             this.initPromotionModal();
             this.startNewGame();
@@ -659,4 +666,143 @@
 
             const move = moves[Math.floor(Math.random() * moves.length)];
             const result = this.chess.move(move);
-            if (result) this.afterMo
+            if (result) this.afterMove(result);
+        },
+
+        startNewGame() {
+            if (!this.chess) return;
+
+            this.chess.reset();
+            this.selectedSquare = null;
+            this.pendingPromotion = null;
+            this.lastMoveSquares = [];
+            this.moveHistory = [];
+            this.timeOut = false;
+
+            const minutes = parseInt(document.getElementById('timeControl').value, 10) || 10;
+            this.timers.w = minutes * 60;
+            this.timers.b = minutes * 60;
+
+            this.updateTimerDisplay();
+            this.stopTimer();
+            this.startTimer();
+
+            this.render();
+        },
+
+        undoMove() {
+            if (!this.moveHistory.length) return;
+
+            if (this.mode === 'pva') {
+                this.chess.undo();
+                this.moveHistory.pop();
+                if (this.moveHistory.length) {
+                    this.chess.undo();
+                    this.moveHistory.pop();
+                }
+            } else {
+                this.chess.undo();
+                this.moveHistory.pop();
+            }
+
+            this.lastMoveSquares = [];
+            this.selectedSquare = null;
+            this.pendingPromotion = null;
+            this.clearHighlights();
+            this.render();
+        },
+
+        initPromotionModal() {
+            const promoWrap = document.getElementById('promoOptions');
+            const pieces = ['q','r','b','n'];
+
+            promoWrap.innerHTML = '';
+            pieces.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'promo-piece';
+                el.dataset.piece = p;
+                el.innerText = PIECE_SYMBOLS.w[p];
+                el.addEventListener('click', () => game.applyPromotion(p));
+                promoWrap.appendChild(el);
+            });
+
+            const modal = document.getElementById('promotionModal');
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    game.pendingPromotion = null;
+                    modal.style.display = 'none';
+                }
+            });
+        },
+
+        applyPromotion(pieceType) {
+            if (!this.pendingPromotion) return;
+            const { from, to } = this.pendingPromotion;
+
+            const move = this.chess.move({
+                from,
+                to,
+                promotion: pieceType
+            });
+
+            if (move) {
+                this.afterMove(move);
+            }
+
+            this.pendingPromotion = null;
+            document.getElementById('promotionModal').style.display = 'none';
+            this.selectedSquare = null;
+        },
+
+        startTimer() {
+            if (this.timerInterval) clearInterval(this.timerInterval);
+            this.timerInterval = setInterval(() => this.tick(), 1000);
+        },
+
+        stopTimer() {
+            if (this.timerInterval) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+            }
+        },
+
+        tick() {
+            if (this.chess.game_over() || this.timeOut) {
+                this.stopTimer();
+                return;
+            }
+
+            const turn = this.chess.turn();
+            this.timers[turn]--;
+
+            if (this.timers[turn] <= 0) {
+                this.timers[turn] = 0;
+                this.timeOut = true;
+                this.stopTimer();
+                const winner = turn === 'w' ? 'černý' : 'bílý';
+                document.getElementById('statusText').innerText =
+                    `Vypršel čas – vyhrává ${winner}`;
+                alert(`Vypršel čas – vyhrává ${winner}`);
+            }
+
+            this.updateTimerDisplay();
+        },
+
+        updateTimerDisplay() {
+            const fmt = (s) => {
+                const m = Math.floor(s / 60).toString().padStart(2,'0');
+                const sec = (s % 60).toString().padStart(2,'0');
+                return `${m}:${sec}`;
+            };
+
+            document.getElementById('timer-w').innerText = fmt(this.timers.w);
+            document.getElementById('timer-b').innerText = fmt(this.timers.b);
+        }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+        game.init();
+    });
+</script>
+</body>
+</html>
