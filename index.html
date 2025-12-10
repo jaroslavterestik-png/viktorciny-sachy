@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Viktorčiny šachy</title>
+    <!-- Import PeerJS pro online hraní -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #2d2d2d;
+            --board-border: #4a4a4a;
+            --light-square: #f0d9b5;
+            --dark-square: #b58863;
+            --highlight: rgba(255, 255, 0, 0.5);
+            --selected: rgba(20, 85, 30, 0.6);
+            --valid-move: rgba(0, 0, 0, 0.2);
+            --text-color: #f0f0f0;
+            --accent: #4CAF50;
+            --danger: #f44336;
+            --blue: #2196F3;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            overflow: auto;
+        }
+
+        h1 { margin: 5px 0; font-size: 1.3rem; text-align: center; }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            min-height: 100vh;
+            padding: 10px;
+            padding-bottom: 40px;
+            box-sizing: border-box;
+            justify-content: flex-start;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+            color: white;
+        }
+
+        button:hover { opacity: 0.9; }
+        .btn-primary { background-color: var(--accent); }
+        .btn-danger { background-color: var(--danger); }
+        .btn-secondary { background-color: #666; }
+        .btn-online { background-color: var(--blue); }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 500px;
+            background: #333;
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-sizing: border-box;
+            font-size: 0.9rem;
+        }
+
+        .player-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        .timer {
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: #000;
+            color: #f00;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-top: 4px;
+            min-width: 70px;
+            text-align: center;
+        }
+
+        .active-turn .timer {
+            color: #0f0;
+            box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+        }
+
+        .board-wrapper {
+            position: relative;
+            width: min(95vw, 55vh);
+            height: min(95vw, 55vh); 
+            aspect-ratio: 1 / 1;
+            margin: 5px auto;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            width: 100%;
+            height: 100%;
+            border: 4px solid var(--board-border);
+            box-sizing: border-box;
+            background: var(--board-border);
+        }
+
+        .square {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: calc(min(95vw, 55vh) / 9); 
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .square.light { background-color: var(--light-square); color: black; }
+        .square.dark { background-color: var(--dark-square); color: black; }
+        
+        .piece {
+            z-index: 2;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 1;
+        }
+        .piece.white { color: #fff; text-shadow: 0 0 2px #000, 1px 1px 2px rgba(0,0,0,0.5); }
+        .piece.black { color: #000; text-shadow: 0 0 2px #fff, 1px 1px 2px rgba(255,255,255,0.5); }
+
+        .square.selected { background-color: var(--selected) !important; }
+        .square.last-move { background-color: rgba(255, 255, 0, 0.3) !important; }
+        
+        .hint-dot {
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .square.capture-hint::after {
+            content: '';
+            position: absolute;
+            width: 85%;
+            height: 85%;
+            border: 4px solid rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            box-sizing: border-box;
+            z-index: 1;
+        }
+
+        .square.check {
+            background: radial-gradient(circle, rgba(255,0,0,0.8) 0%, transparent 70%);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background: var(--bg-color);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #555;
+            max-width: 90%;
+        }
+
+        .promotion-options {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .promo-piece {
+            font-size: 3rem;
+            cursor: pointer;
+            padding: 5px 15px;
+            background: #444;
+            border-radius: 8px;
+            transition: transform 0.1s;
+        }
+        .promo-piece:hover { background: #666; transform: scale(1.1); }
+
+        .settings {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            font-size: 0.8rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        select, input {
+            padding: 4px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background: #444;
+            color: white;
+        }
+
+        /* Online UI styles */
+        .online-status {
+            font-size: 0.8rem;
+            color: var(--blue);
+            margin-bottom: 5px;
+            height: 1.2em;
+        }
+        
+        .id-display {
+            font-family: monospace;
+            background: #000;
+            padding: 5px;
+            border-radius: 4px;
+            color: #fff;
+            margin: 10px 0;
+            user-select: text;
+        }
+
+        @media (min-width: 600px) {
+            .board-wrapper {
+                width: 500px;
+                height: 500px;
+            }
+            .square { font-size: 55px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <h1>Viktorčiny šachy</h1>
+        
+        <div class="online-status" id="onlineStatus">Offline</div>
+
+        <div class="settings">
+            <label>Režim:
+                <select id="gameMode" onchange="game.changeMode()">
+                    <option value="pvp">Hráč vs Hráč (Zde)</option>
+                    <option value="pva" selected>Hráč vs AI</option>
+                    <option value="online">Hráč vs Hráč (Online)</option>
+                </select>
+            </label>
+            <label>Čas (min):
+                <input type="number" id="timeControl" value="10" min="1" max="60" style="width: 40px;">
+            </label>
+        </div>
+
+        <div class="status-bar">
+            <div class="player-info" id="black-info">
+                <span>Černý</span>
+                <div class="timer" id="timer-b">10:00</div>
+            </div>
+            <div style="display: flex; align-items: center; font-weight: bold; font-size: 1.2rem; color: #666;">VS</div>
+            <div class="player-info active-turn" id="white-info">
+                <span>Bílý</span>
+                <div class="timer" id="timer-w">10:00</div>
+            </div>
+        </div>
+        
+        <div id="statusText" style="color: #ccc; font-style: italic; min-height: 20px; text-align: center; margin: 2px 0; font-size: 0.9rem;">
+            Na tahu je bílý
+        </div>
+
+        <div class="board-wrapper">
+            <div class="board" id="board">
+                <!-- Generováno JS -->
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="game.startNewGame()">Nová hra</button>
+            <button class="btn-secondary" onclick="game.undoMove()">Zpět</button>
+            <button class="btn-online" id="btnOnline" style="display:none" onclick="onlineManager.showMenu()">Online Menu</button>
+            <!-- <button class="btn-danger" onclick="game.resign()">Vzdát se</button> -->
+        </div>
+    </div>
+
+    <!-- Promotion Modal -->
+    <div id="promotionModal" class="modal">
+        <div class="modal-content">
+            <h2>Proměna pěšce</h2>
+            <p>Vyberte novou figuru:</p>
+            <div class="promotion-options" id="promoOptions"></div>
+        </div>
+    </div>
+
+    <!-- Online Modal -->
+    <div id="onlineModal" class="modal">
+        <div class="modal-content">
+            <h2>Online Hra</h2>
+            <div id="onlineMenuInitial">
+                <button class="btn-primary" onclick="onlineManager.hostGame()">Založit hru (Bílý)</button>
+                <br><br>
+                <input type="text" id="joinInput" placeholder="Zadejte ID soupeře" style="width: 150px; text-align: center;">
+                <button class="btn-online" onclick="onlineManager.joinGame()">Připojit se (Černý)</button>
+            </div>
+            <div id="onlineMenuHost" style="display:none">
+                <p>Pošlete tento kód kamarádovi:</p>
+                <div class="id-display" id="myIdDisplay">Generuji...</div>
+                <p>Čekám na soupeře...</p>
+            </div>
+            <br>
+            <button class="btn-secondary" onclick="document.getElementById('onlineModal').style.display='none'">Zavřít</button>
+        </div>
+    </div>
+
+<script>
+/**
+ * Šachová Logika & AI & Online
+ */
+
+const PIECES = {
+    w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' },
+    b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }
+};
+
+const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+
+const SoundFX = {
+    ctx: null,
+    init: function() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+    playTone: function(freq, type, duration) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    },
+    move: function() { this.init(); this.playTone(300, 'sine', 0.1); },
+    capture: function() { this.init(); this.playTone(150, 'square', 0.15); },
+    check: function() { this.init(); this.playTone(600, 'triangle', 0.3); }
+};
+
+class OnlineManager {
+    constructor() {
+        this.peer = null;
+        this.conn = null;
+        this.myId = null;
+        this.isHost = false;
+    }
+
+    showMenu() {
+        document.getElementById('onlineModal').style.display = 'flex';
+        document.getElementById('onlineMenuInitial').style.display = 'block';
+        document.getElementById('onlineMenuHost').style.display = 'none';
+    }
+
+    generateId() {
+        // Jednoduché random ID
+        return 'sachy-' + Math.floor(Math.random() * 9000 + 1000);
+    }
+
+    hostGame() {
+        document.getElementById('onlineMenuInitial').style.display = 'none';
+        document.getElementById('onlineMenuHost').style.display = 'block';
+        
+        const id = this.generateId();
+        this.peer = new Peer(id);
+        
+        this.peer.on('open', (id) => {
+            this.myId = id;
+            document.getElementById('myIdDisplay').innerText = id;
+            this.isHost = true;
+        });
+
+        this.peer.on('connection', (conn) => {
+            this.conn = conn;
+            this.setupConnection();
+            document.getElementById('onlineModal').style.display = 'none';
+            alert("Soupeř připojen! Hrajete za Bílého.");
+            game.startOnlineGame('w');
+        });
+        
+        this.peer.on('error', (err) => {
+            alert("Chyba spojení: " + err.type);
+            console.error(err);
+        });
+    }
+
+    joinGame() {
+        const destId = document.getElementById('joinInput').value.trim();
+        if(!destId) return alert("Zadejte ID");
+
+        // Já potřebuji také ID, abych se připojil
+        this.peer = new Peer(); 
+        
+        this.peer.on('open', () => {
+            this.conn = this.peer.connect(destId);
+            this.isHost = false;
+            
+            this.conn.on('open', () => {
+                this.setupConnection();
+                document.getElementById('onlineModal').style.display = 'none';
+                alert("Připojeno! Hrajete za Černého.");
+                game.startOnlineGame('b');
+            });
+            
+            this.peer.on('error', (err) => {
+                alert("Nepodařilo se připojit. Zkontrolujte ID.");
+            });
+        });
+    }
+
+    setupConnection() {
+        document.getElementById('onlineStatus').innerText = "Online: Připojeno";
+        document.getElementById('onlineStatus').style.color = "#0f0";
+        
+        this.conn.on('data', (data) => {
+            if (data.type === 'move') {
+                game.executeMove(data.from, data.to, data.promotion, false); // false = neposílat zpět
+            } else if (data.type === 'restart') {
+                game.startNewGame(true); // true = local only reset
+            }
+        });
+        
+        this.conn.on('close', () => {
+            alert("Soupeř se odpojil.");
+            document.getElementById('onlineStatus').innerText = "Offline";
+            document.getElementById('onlineStatus').style.color = "var(--blue)";
+            game.mode = 'pva';
+            document.getElementById('gameMode').value = 'pva';
+            game.changeMode();
+        });
+    }
+
+    sendMove(from, to, promotion) {
+        if (this.conn && this.conn.open) {
+            this.conn.send({ type: 'move', from, to, promotion });
+        }
+    }
+    
+    sendRestart() {
+        if (this.conn && this.conn.open) {
+            this.conn.send({ type: 'restart' });
+        }
+    }
+}
+
+const onlineManager = new OnlineManager();
+
+class ChessGame {
+    constructor() {
+        this.board = [];
+        this.turn = 'w'; 
+        this.castling = { w: { k: true, q: true }, b: { k: true, q: true } };
+        this.enPassantTarget = null;
+        this.history = [];
+        this.gameOver = false;
+        
+        this.whiteTime = 600;
+        this.blackTime = 600;
+        this.timerInterval = null;
+        this.mode = 'pva';
+        this.aiThinking = false;
+        
+        // Online specific
+        this.myColor = null; // 'w' nebo 'b' pokud online
+
+        this.initBoard();
+        this.renderBoard();
+        document.body.addEventListener('click', () => SoundFX.init(), { once: true });
+    }
+
+    initBoard() {
+        const setup = [
+            'r', 'n', 'b', 'q', 'k', 'b', 'n', 'r',
+            'p', 'p', 'p', 'p', 'p', 'p', 'p', 'p',
+            null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null,
+            'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P',
+            'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'
+        ];
+        this.board = [...setup];
+    }
+    
+    changeMode() {
+        this.mode = document.getElementById('gameMode').value;
+        const btnOnline = document.getElementById('btnOnline');
+        
+        if (this.mode === 'online') {
+            btnOnline.style.display = 'inline-block';
+            onlineManager.showMenu();
+        } else {
+            btnOnline.style.display = 'none';
+            this.myColor = null; // Reset online color restriction
+            document.getElementById('onlineStatus').innerText = "Offline";
+            document.getElementById('onlineStatus').style.color = "var(--blue)";
+            if (onlineManager.peer) {
+                onlineManager.peer.destroy();
+                onlineManager.peer = null;
+            }
+        }
+    }
+
+    startNewGame(isRemoteTrigger = false) {
+        if (this.mode === 'online' && !isRemoteTrigger) {
+            onlineManager.sendRestart();
+        }
+        
+        clearInterval(this.timerInterval);
+        this.initBoard();
+        this.turn = 'w';
+        this.castling = { w: { k: true, q: true }, b: { k: true, q: true } };
+        this.enPassantTarget = null;
+        this.history = [];
+        this.gameOver = false;
+        
+        const minutes = parseInt(document.getElementById('timeControl').value) || 10;
+        this.whiteTime = minutes * 60;
+        this.blackTime = minutes * 60;
+        this.aiThinking = false;
+        
+        this.updateStatusUI();
+        this.deselect();
+        this.renderBoard();
+        this.startTimer();
+    }
+    
+    startOnlineGame(color) {
+        this.myColor = color;
+        this.startNewGame(true); // true to prevent resending restart
+        // Otočit desku pokud jsem černý? Zatím ne, pro jednoduchost.
+        this.updateStatusUI();
+    }
+
+    startTimer() {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerInterval = setInterval(() => {
+            if (this.gameOver) return;
+            // V online módu odečítáme čas jen když běží
+            // Pro jednoduchost: Čas běží lokálně. Synchronizace času je složitá,
+            // spoléháme na to, že prohlížeče jdou podobně rychle.
+
+            if (this.turn === 'w') {
+                this.whiteTime--;
+                if (this.whiteTime <= 0) this.endGame('b', 'Čas vypršel!');
+            } else {
+                this.blackTime--;
+                if (this.blackTime <= 0) this.endGame('w', 'Čas vypršel!');
+            }
+            this.updateTimeUI();
+        }, 1000);
+        this.updateTimeUI();
+    }
+
+    updateTimeUI() {
+        const fmt = (t) => {
+            if (t < 0) t = 0;
+            const m = Math.floor(t / 60).toString().padStart(2, '0');
+            const s = (t % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        };
+        document.getElementById('timer-w').textContent = fmt(this.whiteTime);
+        document.getElementById('timer-b').textContent = fmt(this.blackTime);
+
+        document.getElementById('white-info').classList.toggle('active-turn', this.turn === 'w');
+        document.getElementById('black-info').classList.toggle('active-turn', this.turn === 'b');
+    }
+
+    getPieceColor(piece) {
+        if (!piece) return null;
+        return piece === piece.toUpperCase() ? 'w' : 'b';
+    }
+
+    // --- Logika Pohybů ---
+    getPseudoMoves(index, board = this.board) {
+        const piece = board[index];
+        if (!piece) return [];
+        const color = this.getPieceColor(piece);
+        const type = piece.toLowerCase();
+        const moves = [];
+        const row = Math.floor(index / 8);
+        const col = index % 8;
+
+        const addMove = (r, c) => {
+            if (r < 0 || r > 7 || c < 0 || c > 7) return false;
+            const targetIndex = r * 8 + c;
+            const targetPiece = board[targetIndex];
+            if (!targetPiece) { moves.push(targetIndex); return true; }
+            else if (this.getPieceColor(targetPiece) !== color) { moves.push(targetIndex); return false; }
+            return false;
+        };
+
+        if (type === 'p') {
+            const dir = color === 'w' ? -1 : 1;
+            const startRow = color === 'w' ? 6 : 1;
+            if (!board[(row + dir) * 8 + col]) {
+                moves.push((row + dir) * 8 + col);
+                if (row === startRow && !board[(row + dir * 2) * 8 + col]) {
+                    moves.push((row + dir * 2) * 8 + col);
+                }
+            }
+            [[dir, -1], [dir, 1]].forEach(([dr, dc]) => {
+                const tr = row + dr, tc = col + dc;
+                if (tr >= 0 && tr < 8 && tc >= 0 && tc < 8) {
+                    const tidx = tr * 8 + tc;
+                    if ((board[tidx] && this.getPieceColor(board[tidx]) !== color) || tidx === this.enPassantTarget) {
+                        moves.push(tidx);
+                    }
+                }
+            });
+        } 
+        else if (type === 'n') { [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr, dc]) => addMove(row + dr, col + dc)); } 
+        else if (type === 'k') { [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr, dc]) => addMove(row + dr, col + dc)); } 
+        else {
+            const directions = [];
+            if (type === 'b' || type === 'q') directions.push([1,1],[1,-1],[-1,1],[-1,-1]);
+            if (type === 'r' || type === 'q') directions.push([1,0],[-1,0],[0,1],[0,-1]);
+            directions.forEach(([dr, dc]) => { let r=row+dr, c=col+dc; while(addMove(r,c)) { r+=dr; c+=dc; } });
+        }
+        return moves;
+    }
+
+    isCheck(color, tempBoard = this.board) {
+        const kingChar = color === 'w' ? 'K' : 'k';
+        const kingIdx = tempBoard.indexOf(kingChar);
+        if (kingIdx === -1) return true; 
+        for (let i = 0; i < 64; i++) {
+            const p = tempBoard[i];
+            if (p && this.getPieceColor(p) !== color) {
+                const moves = this.getPseudoMoves(i, tempBoard);
+                if (moves.includes(kingIdx)) return true;
+            }
+        }
+        return false;
+    }
+
+    getLegalMoves(index) {
+        const piece = this.board[index];
+        if (!piece || this.getPieceColor(piece) !== this.turn) return [];
+
+        const pseudoMoves = this.getPseudoMoves(index);
+        const legalMoves = [];
+
+        pseudoMoves.forEach(to => {
+            const savedBoard = [...this.board];
+            if (piece.toLowerCase() === 'p' && to === this.enPassantTarget && !savedBoard[to]) {
+                const capIdx = to + (this.turn === 'w' ? 8 : -8);
+                savedBoard[capIdx] = null;
+            }
+            savedBoard[to] = savedBoard[index];
+            savedBoard[index] = null;
+            if (!this.isCheck(this.turn, savedBoard)) legalMoves.push(to);
+        });
+
+        if (piece.toLowerCase() === 'k' && !this.isCheck(this.turn)) {
+            const row = this.turn === 'w' ? 7 : 0;
+            const rights = this.castling[this.turn];
+            if (rights.k && !this.board[row*8+5] && !this.board[row*8+6]) {
+                if (this.isSquareSafe(row*8+5, this.turn) && this.isSquareSafe(row*8+6, this.turn)) legalMoves.push(row*8+6);
+            }
+            if (rights.q && !this.board[row*8+1] && !this.board[row*8+2] && !this.board[row*8+3]) {
+                 if (this.isSquareSafe(row*8+3, this.turn) && this.isSquareSafe(row*8+2, this.turn)) legalMoves.push(row*8+2);
+            }
+        }
+        return legalMoves;
+    }
+
+    isSquareSafe(index, color) {
+        const enemyColor = color === 'w' ? 'b' : 'w';
+        for (let i = 0; i < 64; i++) {
+            const p = this.board[i];
+            if (p && this.getPieceColor(p) === enemyColor) {
+                if (this.getPseudoMoves(i).includes(index)) return false;
+            }
+        }
+        return true;
+    }
+
+    makeMove(from, to, promotion = 'q') {
+        const piece = this.board[from];
+        const target = this.board[to];
+        const moveData = { from, to, piece, target, castling: JSON.parse(JSON.stringify(this.castling)), enPassantTarget: this.enPassantTarget };
+
+        let epCapture = false;
+        if (piece.toLowerCase() === 'p' && to === this.enPassantTarget && !target) {
+            const capIdx = to + (this.turn === 'w' ? 8 : -8);
+            moveData.capturedEp = this.board[capIdx]; moveData.capIdx = capIdx; this.board[capIdx] = null; epCapture = true;
+        }
+
+        this.board[to] = piece; this.board[from] = null;
+
+        if (piece.toLowerCase() === 'k' && Math.abs(to - from) === 2) {
+            const row = Math.floor(from / 8);
+            if (to === from + 2) { this.board[row*8+5] = this.board[row*8+7]; this.board[row*8+7] = null; } 
+            else { this.board[row*8+3] = this.board[row*8+0]; this.board[row*8+0] = null; }
+        }
+
+        if (piece.toLowerCase() === 'p') {
+            const destRow = Math.floor(to / 8);
+            if (destRow === 0 || destRow === 7) this.board[to] = this.turn === 'w' ? promotion.toUpperCase() : promotion.toLowerCase();
+        }
+
+        if (piece === 'K') this.castling.w = { k: false, q: false };
+        if (piece === 'k') this.castling.b = { k: false, q: false };
+        if (piece === 'R') { if (from === 63) this.castling.w.k = false; if (from === 56) this.castling.w.q = false; }
+        if (piece === 'r') { if (from === 7) this.castling.b.k = false; if (from === 0) this.castling.b.q = false; }
+        if (target === 'R') { if (to === 63) this.castling.w.k = false; if (to === 56) this.castling.w.q = false; }
+        if (target === 'r') { if (to === 7) this.castling.b.k = false; if (to === 0) this.castling.b.q = false; }
+
+        this.history.push(moveData);
+        this.enPassantTarget = (piece.toLowerCase() === 'p' && Math.abs(to - from) === 16) ? (from + to) / 2 : null;
+        this.turn = this.turn === 'w' ? 'b' : 'w';
+        
+        try { if (target || epCapture) SoundFX.capture(); else SoundFX.move(); } catch(e){}
+        return true;
+    }
+
+    undoMove() {
+        if (this.mode === 'online') return; // Undo v online módu je komplikované, zatím zakázáno
+        if (this.history.length === 0 || this.gameOver) { if (this.gameOver) { this.gameOver = false; this.startTimer(); } }
+        
+        let movesToUndo = (this.mode === 'pva' && this.turn === 'w' && this.history.length >= 2) ? 2 : 1;
+        for (let i=0; i<movesToUndo; i++) {
+            if (this.history.length === 0) break;
+            const last = this.history.pop();
+            this.board[last.from] = last.piece; this.board[last.to] = last.target;
+            if (last.capturedEp) this.board[last.capIdx] = last.capturedEp;
+            if (last.piece.toLowerCase() === 'k' && Math.abs(last.to - last.from) === 2) {
+                if (last.to === last.from + 2) { this.board[last.from + 7] = this.board[last.from + 5]; this.board[last.from + 5] = null; } 
+                else { this.board[last.from + 0] = this.board[last.from + 3]; this.board[last.from + 3] = null; }
+            }
+            this.castling = last.castling; this.enPassantTarget = last.enPassantTarget;
+            this.turn = this.turn === 'w' ? 'b' : 'w';
+        }
+        this.gameOver = false;
+        this.updateStatusUI();
+        this.renderBoard();
+        this.deselect();
+    }
+
+    checkGameState() {
+        let hasMoves = false;
+        for (let i = 0; i < 64; i++) {
+            if (this.getPieceColor(this.board[i]) === this.turn) {
+                if (this.getLegalMoves(i).length > 0) { hasMoves = true; break; }
+            }
+        }
+
+        if (!hasMoves) {
+            if (this.isCheck(this.turn)) this.endGame(this.turn === 'w' ? 'b' : 'w', 'Mat!');
+            else this.endGame('draw', 'Pat (Remíza)');
+            return;
+        }
+
+        const pieces = this.board.filter(p => p !== null);
+        if (pieces.length <= 3) {
+            const types = pieces.map(p => p.toLowerCase());
+            if (pieces.length === 2 || (pieces.length === 3 && (types.includes('n') || types.includes('b')))) 
+                this.endGame('draw', 'Remíza (Nedostatek materiálu)');
+        }
+        
+        if (this.isCheck(this.turn)) SoundFX.check();
+        this.updateStatusUI();
+        if (this.mode === 'pva' && this.turn === 'b' && !this.gameOver) setTimeout(() => this.makeAIMove(), 250);
+    }
+
+    endGame(winner, reason) {
+        this.gameOver = true;
+        clearInterval(this.timerInterval);
+        const text = winner === 'draw' ? reason : `${reason} Vítěz: ${winner === 'w' ? 'Bílý' : 'Černý'}`;
+        document.getElementById('statusText').innerText = text;
+        if (winner !== 'draw') {
+             const loserColor = winner === 'w' ? 'b' : 'w';
+             const kIdx = this.board.indexOf(loserColor === 'w' ? 'K' : 'k');
+             if(kIdx !== -1) document.querySelectorAll('.square')[kIdx].classList.add('check');
+        }
+        setTimeout(() => alert(text), 100);
+    }
+
+    updateStatusUI() {
+        if (this.gameOver) return;
+        let text = this.isCheck(this.turn) ? 'ŠACH! ' : '';
+        text += (this.turn === 'w' ? 'Na tahu: Bílý' : 'Na tahu: Černý');
+        if (this.mode === 'online' && this.myColor) {
+            text += (this.myColor === this.turn ? ' (VY)' : ' (Soupeř)');
+        }
+        document.getElementById('statusText').innerText = text;
+    }
+
+    resign() {
+        if (this.gameOver) return;
+        this.endGame(this.turn === 'w' ? 'b' : 'w', 'Hráč se vzdal.');
+    }
+
+    // --- AI ---
+    evaluateBoard() {
+        let score = 0;
+        for (let i = 0; i < 64; i++) {
+            const piece = this.board[i];
+            if (!piece) continue;
+            const type = piece.toLowerCase();
+            const val = PIECE_VALUES[type] || 0;
+            const isWhite = piece === piece.toUpperCase();
+            let posBonus = 0;
+            if (type === 'p') posBonus = isWhite ? (6-Math.floor(i/8))*10 : Math.floor(i/8)*10;
+            else if (type === 'n' || type === 'b') { if (Math.floor(i/8) > 2 && Math.floor(i/8) < 5 && i%8 > 2 && i%8 < 5) posBonus = 20; }
+            if (isWhite) score += (val + posBonus); else score -= (val + posBonus);
+        }
+        return score;
+    }
+
+    makeAIMove() {
+        if (this.gameOver) return;
+        this.aiThinking = true;
+        const bestMove = this.minimax(2, -Infinity, Infinity, false);
+        if (bestMove && bestMove.from !== undefined) {
+            this.executeMove(bestMove.from, bestMove.to, 'q');
+        }
+        this.aiThinking = false;
+    }
+
+    minimax(depth, alpha, beta, isMaximizingPlayer) {
+        if (depth === 0) return { score: this.evaluateBoard() };
+        const color = isMaximizingPlayer ? 'w' : 'b';
+        const possibleMoves = this.getAllAllMoves(color);
+        if (possibleMoves.length === 0) return { score: this.isCheck(color) ? (isMaximizingPlayer ? -Infinity : Infinity) : 0 };
+
+        possibleMoves.sort((a, b) => {
+             const valA = this.board[a.to] ? PIECE_VALUES[this.board[a.to].toLowerCase()] : 0;
+             const valB = this.board[b.to] ? PIECE_VALUES[this.board[b.to].toLowerCase()] : 0;
+             return valB - valA;
+        });
+
+        let bestMove = null;
+        if (isMaximizingPlayer) { 
+            let maxEval = -Infinity;
+            for (const move of possibleMoves) {
+                const saved = this.saveState(); this.makeMove(move.from, move.to, 'q');
+                const evalObj = this.minimax(depth - 1, alpha, beta, false); this.restoreState(saved);
+                if (evalObj.score > maxEval) { maxEval = evalObj.score; bestMove = move; }
+                alpha = Math.max(alpha, evalObj.score); if (beta <= alpha) break;
+            }
+            return { score: maxEval, ...bestMove };
+        } else { 
+            let minEval = Infinity;
+            for (const move of possibleMoves) {
+                const saved = this.saveState(); this.makeMove(move.from, move.to, 'q');
+                const evalObj = this.minimax(depth - 1, alpha, beta, true); this.restoreState(saved);
+                if (evalObj.score < minEval) { minEval = evalObj.score; bestMove = move; }
+                beta = Math.min(beta, evalObj.score); if (beta <= alpha) break;
+            }
+            return { score: minEval, ...bestMove };
+        }
+    }
+
+    getAllAllMoves(color) {
+        const moves = [];
+        for (let i = 0; i < 64; i++) {
+            if (this.board[i] && this.getPieceColor(this.board[i]) === color) {
+                this.getLegalMoves(i).forEach(to => moves.push({ from: i, to }));
+            }
+        }
+        return moves;
+    }
+
+    saveState() {
+        return { board: [...this.board], turn: this.turn, castling: JSON.parse(JSON.stringify(this.castling)), enPassantTarget: this.enPassantTarget, gameOver: this.gameOver, history: [...this.history] };
+    }
+    restoreState(state) {
+        this.board = state.board; this.turn = state.turn; this.castling = state.castling; this.enPassantTarget = state.enPassantTarget; this.gameOver = state.gameOver; this.history = state.history;
+    }
+
+    // --- UI ---
+    renderBoard() {
+        const boardEl = document.getElementById('board');
+        boardEl.innerHTML = '';
+        let lastMoveFrom = -1, lastMoveTo = -1;
+        if (this.history.length > 0) { const last = this.history[this.history.length-1]; lastMoveFrom = last.from; lastMoveTo = last.to; }
+
+        this.board.forEach((piece, index) => {
+            const square = document.createElement('div');
+            const row = Math.floor(index / 8);
+            const col = index % 8;
+            square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+            if (index === lastMoveFrom || index === lastMoveTo) square.classList.add('last-move');
+            square.dataset.index = index;
+            square.onclick = () => this.handleSquareClick(index);
+
+            if (piece) {
+                const pDiv = document.createElement('div');
+                pDiv.className = `piece ${this.getPieceColor(piece) === 'w' ? 'white' : 'black'}`;
+                pDiv.textContent = PIECES[this.getPieceColor(piece)][piece.toLowerCase()];
+                square.appendChild(pDiv);
+                if (piece.toLowerCase() === 'k' && this.isCheck(this.getPieceColor(piece))) square.classList.add('check');
+            }
+            boardEl.appendChild(square);
+        });
+        
+        if (this.selectedSquare !== null) {
+            const squares = boardEl.children;
+            squares[this.selectedSquare].classList.add('selected');
+            this.possibleMoves.forEach(m => {
+                const isCapture = this.board[m] !== null || (m === this.enPassantTarget && this.board[this.selectedSquare].toLowerCase() === 'p');
+                if (isCapture) squares[m].classList.add('capture-hint');
+                else { const dot = document.createElement('div'); dot.className = 'hint-dot'; squares[m].appendChild(dot); }
+            });
+        }
+    }
+    
+    selectedSquare = null; possibleMoves = [];
+
+    handleSquareClick(index) {
+        if (this.gameOver || this.aiThinking) return;
+        
+        // Online Logic Block: Pokud nejsem na tahu nebo to není moje barva
+        if (this.mode === 'online') {
+            if (!this.myColor) return; // Hra nezačala
+            if (this.turn !== this.myColor) return; // Není můj tah
+        } else if (this.mode === 'pva' && this.turn === 'b') {
+            return; // Tah AI
+        }
+
+        const piece = this.board[index];
+        const isOwnPiece = piece && this.getPieceColor(piece) === this.turn;
+
+        if (isOwnPiece) { this.selectSquare(index); } 
+        else if (this.selectedSquare !== null && this.possibleMoves.includes(index)) {
+            const movingPiece = this.board[this.selectedSquare];
+            const isPawn = movingPiece.toLowerCase() === 'p';
+            const destRow = Math.floor(index / 8);
+            if (isPawn && (destRow === 0 || destRow === 7)) this.showPromotionModal(this.selectedSquare, index);
+            else this.executeMove(this.selectedSquare, index, 'q', true); // true = send online
+        } 
+        else { this.deselect(); this.renderBoard(); }
+    }
+
+    selectSquare(index) { this.selectedSquare = index; this.possibleMoves = this.getLegalMoves(index); this.renderBoard(); }
+    deselect() { this.selectedSquare = null; this.possibleMoves = []; }
+
+    executeMove(from, to, promotion = 'q', sendOnline = false) {
+        this.makeMove(from, to, promotion);
+        
+        // Odeslat tah online, pokud jsme v online módu a tah provedl lokální hráč
+        if (this.mode === 'online' && sendOnline) {
+            onlineManager.sendMove(from, to, promotion);
+        }
+
+        this.deselect();
+        this.renderBoard();
+        this.checkGameState();
+    }
+
+    showPromotionModal(from, to) {
+        const modal = document.getElementById('promotionModal');
+        const container = document.getElementById('promoOptions');
+        container.innerHTML = '';
+        const pieces = ['q', 'r', 'b', 'n'];
+        pieces.forEach(p => {
+            const btn = document.createElement('div');
+            btn.className = 'promo-piece';
+            btn.style.color = '#fff'; 
+            btn.textContent = PIECES[this.turn][p];
+            btn.onclick = () => {
+                modal.style.display = 'none';
+                this.executeMove(from, to, p, true);
+            };
+            container.appendChild(btn);
+        });
+        modal.style.display = 'flex';
+    }
+}
+
+const game = new ChessGame();
+game.startNewGame();
+
+</script>
+</body>
+</html>
