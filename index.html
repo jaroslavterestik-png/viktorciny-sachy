@@ -6,8 +6,8 @@
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Viktorčiny šachy</title>
 
-    <!-- chess.js – pravidla a validace tahů (FIDE) -->
-    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.13.4/chess.min.js"></script>
+    <!-- chess.js – UMD verze (funguje s new Chess()) -->
+    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
 
     <style>
         :root {
@@ -25,7 +25,6 @@
             --panel-border: rgba(64, 196, 255, 0.3);
 
             --accent: #00b0ff;
-            --danger: #f50057;
             --secondary: #5c6bc0;
 
             --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -151,12 +150,6 @@
             min-width: 90px;
             text-align: center;
             box-shadow: 0 0 10px rgba(41, 98, 255, 0.3);
-        }
-
-        .active-turn .timer {
-            border-color: #00e5ff;
-            box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
-            color: #e0f7fa;
         }
 
         .board-wrapper {
@@ -352,7 +345,7 @@
 <div class="game-container">
     <h1>Viktorčiny šachy</h1>
 
-    <div class="online-status" id="onlineStatus">Offline</div>
+    <div class="online-status" id="onlineStatus">Offline (místní hra)</div>
 
     <div class="settings glass-panel">
         <label>Režim:
@@ -453,15 +446,14 @@
 
         init() {
             this.boardEl = document.getElementById('board');
-            this.chess = new Chess();
+            this.chess = new Chess(); // z chess.js UMD
             this.generateBoard();
             this.initPromotionModal();
             this.startNewGame();
         },
 
         changeMode() {
-            const select = document.getElementById('gameMode');
-            this.mode = select.value;
+            this.mode = document.getElementById('gameMode').value;
             this.startNewGame();
         },
 
@@ -483,14 +475,12 @@
         },
 
         render() {
-            // vyčistit
             const squares = this.boardEl.querySelectorAll('.square');
             squares.forEach(sq => {
                 sq.classList.remove('selected','last-move','check','capture-hint');
                 sq.innerHTML = '';
             });
 
-            // figury podle FEN
             const board = this.chess.board();
             const files = ['a','b','c','d','e','f','g','h'];
 
@@ -511,13 +501,11 @@
                 }
             }
 
-            // poslední tah
             if (this.lastMoveSquares.length === 2) {
                 this.boardEl.querySelector(`[data-square="${this.lastMoveSquares[0]}"]`)?.classList.add('last-move');
                 this.boardEl.querySelector(`[data-square="${this.lastMoveSquares[1]}"]`)?.classList.add('last-move');
             }
 
-            // šach
             if (this.chess.in_check()) {
                 const kingSq = this.findKingSquare(this.chess.turn());
                 if (kingSq) {
@@ -526,19 +514,17 @@
                 }
             }
 
-            // status text
             const statusEl = document.getElementById('statusText');
             if (this.chess.in_checkmate()) {
                 statusEl.innerText = `Mat – vyhrává ${this.chess.turn() === 'w' ? 'černý' : 'bílý'}`;
             } else if (this.chess.in_draw()) {
                 statusEl.innerText = 'Remíza';
             } else if (this.timeOut) {
-                // text nastavíme v timeru
+                // text nastavuje timer
             } else {
                 statusEl.innerText = `Na tahu je ${this.chess.turn() === 'w' ? 'bílý' : 'černý'}`;
             }
 
-            // indikace hráče na tahu
             document.getElementById('white-info')
                 .classList.toggle('active-turn', this.chess.turn() === 'w');
             document.getElementById('black-info')
@@ -565,7 +551,7 @@
         onSquareClick(square) {
             if (this.chess.game_over() || this.timeOut) return;
 
-            // v režimu Hráč vs AI táhne člověk jen bílými
+            // proti AI hráč táhne jen bílými
             if (this.mode === 'pva' && this.chess.turn() === 'b') return;
 
             if (this.pendingPromotion) return;
@@ -587,15 +573,15 @@
 
                 const fromPiece = this.chess.get(this.selectedSquare);
 
-                // klik na jinou vlastní figuru -> změna výběru
-                if (piece && fromPiece && piece.color === fromPiece.color && piece.color === this.chess.turn()) {
+                if (piece && fromPiece &&
+                    piece.color === fromPiece.color &&
+                    piece.color === this.chess.turn()) {
                     this.clearHighlights();
                     this.selectedSquare = square;
                     this.highlightMoves(square);
                     return;
                 }
 
-                // proměna?
                 const destRank = parseInt(square[1], 10);
                 const isPromotion = fromPiece && fromPiece.type === 'p' &&
                     (destRank === 8 || destRank === 1);
@@ -671,149 +657,6 @@
             const moves = this.chess.moves({verbose:true});
             if (!moves.length) return;
 
-            // jednoduchá AI – náhodný tah
             const move = moves[Math.floor(Math.random() * moves.length)];
             const result = this.chess.move(move);
-            if (result) {
-                this.afterMove(result);
-            }
-        },
-
-        startNewGame() {
-            this.chess.reset();
-            this.selectedSquare = null;
-            this.pendingPromotion = null;
-            this.lastMoveSquares = [];
-            this.moveHistory = [];
-            this.timeOut = false;
-
-            // nastavení časomíry
-            const minutes = parseInt(document.getElementById('timeControl').value, 10) || 10;
-            this.timers.w = minutes * 60;
-            this.timers.b = minutes * 60;
-
-            this.updateTimerDisplay();
-            this.stopTimer();
-            this.startTimer();
-
-            this.render();
-        },
-
-        undoMove() {
-            if (!this.moveHistory.length) return;
-
-            if (this.mode === 'pva') {
-                // v režimu proti AI vrátíme tah hráče i tah AI (pokud existuje)
-                this.chess.undo();
-                this.moveHistory.pop();
-                if (this.moveHistory.length) {
-                    this.chess.undo();
-                    this.moveHistory.pop();
-                }
-            } else {
-                this.chess.undo();
-                this.moveHistory.pop();
-            }
-
-            this.lastMoveSquares = [];
-            this.selectedSquare = null;
-            this.pendingPromotion = null;
-            this.clearHighlights();
-            this.render();
-        },
-
-        initPromotionModal() {
-            const promoWrap = document.getElementById('promoOptions');
-            const pieces = ['q','r','b','n'];
-
-            promoWrap.innerHTML = '';
-            pieces.forEach(p => {
-                const el = document.createElement('div');
-                el.className = 'promo-piece';
-                el.dataset.piece = p;
-                el.innerText = PIECE_SYMBOLS.w[p];
-                el.addEventListener('click', () => game.applyPromotion(p));
-                promoWrap.appendChild(el);
-            });
-
-            const modal = document.getElementById('promotionModal');
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    game.pendingPromotion = null;
-                    modal.style.display = 'none';
-                }
-            });
-        },
-
-        applyPromotion(pieceType) {
-            if (!this.pendingPromotion) return;
-            const { from, to } = this.pendingPromotion;
-
-            const move = this.chess.move({
-                from,
-                to,
-                promotion: pieceType
-            });
-
-            if (move) {
-                this.afterMove(move);
-            }
-
-            this.pendingPromotion = null;
-            document.getElementById('promotionModal').style.display = 'none';
-            this.selectedSquare = null;
-        },
-
-        startTimer() {
-            if (this.timerInterval) clearInterval(this.timerInterval);
-            this.timerInterval = setInterval(() => this.tick(), 1000);
-        },
-
-        stopTimer() {
-            if (this.timerInterval) {
-                clearInterval(this.timerInterval);
-                this.timerInterval = null;
-            }
-        },
-
-        tick() {
-            if (this.chess.game_over() || this.timeOut) {
-                this.stopTimer();
-                return;
-            }
-
-            const turn = this.chess.turn();
-            this.timers[turn]--;
-
-            if (this.timers[turn] <= 0) {
-                this.timers[turn] = 0;
-                this.timeOut = true;
-                this.stopTimer();
-                const winner = turn === 'w' ? 'černý' : 'bílý';
-                document.getElementById('statusText').innerText =
-                    `Vypršel čas – vyhrává ${winner}`;
-                alert(`Vypršel čas – vyhrává ${winner}`);
-            }
-
-            this.updateTimerDisplay();
-        },
-
-        updateTimerDisplay() {
-            const fmt = (s) => {
-                const m = Math.floor(s / 60).toString().padStart(2,'0');
-                const sec = (s % 60).toString().padStart(2,'0');
-                return `${m}:${sec}`;
-            };
-
-            document.getElementById('timer-w').innerText = fmt(this.timers.w);
-            document.getElementById('timer-b').innerText = fmt(this.timers.b);
-        }
-    };
-
-    window.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('onlineStatus').innerText = 'Offline (místní hra)';
-        game.init();
-    });
-</script>
-</body>
-</html>
+            if (result) this.afterMo
