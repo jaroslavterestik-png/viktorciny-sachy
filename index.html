@@ -8,119 +8,162 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
-            --bg-color: #2d2d2d;
-            --board-border: #4a4a4a;
-            --light-square: #f0d9b5;
-            --dark-square: #b58863;
-            --highlight: rgba(255, 255, 0, 0.5);
-            --selected: rgba(20, 85, 30, 0.6);
-            --valid-move: rgba(0, 0, 0, 0.2);
-            --text-color: #f0f0f0;
-            --accent: #4CAF50;
-            --danger: #f44336;
-            --blue: #2196F3;
+            /* Moderní tmavé pozadí s gradientem */
+            --bg-gradient: radial-gradient(circle at center, #3a3f46 0%, #181a1d 100%);
+            
+            /* Dřevěná paleta barev */
+            --board-border: #4e342e;
+            --light-square: #ebd1a7; /* Přírodní světlé dřevo */
+            --dark-square: #a37c55;  /* Přírodní tmavé dřevo */
+            
+            /* Herní indikátory */
+            --highlight: rgba(255, 235, 59, 0.5); /* Žlutá pro poslední tah */
+            --selected: rgba(139, 195, 74, 0.6);  /* Zelená pro výběr */
+            --valid-move: rgba(0, 0, 0, 0.25);    /* Tečka pro tah */
+            --check-color: radial-gradient(circle, rgba(255, 82, 82, 0.8) 0%, transparent 70%);
+
+            /* UI Barvy */
+            --text-color: #e0e0e0;
+            --panel-bg: rgba(255, 255, 255, 0.08); /* Skleněný efekt */
+            --panel-border: rgba(255, 255, 255, 0.1);
+            
+            --accent: #66bb6a; /* Jemnější zelená */
+            --danger: #ef5350; /* Jemnější červená */
+            --blue: #42a5f5;   /* Moderní modrá */
+            --secondary: #78909c;
+            
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --radius: 12px;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-gradient);
             color: var(--text-color);
             margin: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start; /* Změna pro lepší scrollování na mobilu */
             min-height: 100vh;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-            overflow: auto;
+            overflow-y: auto; /* Povolit scrollování */
         }
 
-        h1 { margin: 5px 0; font-size: 1.3rem; text-align: center; }
+        h1 { 
+            margin: 15px 0 10px 0; 
+            font-size: 1.8rem; 
+            text-align: center; 
+            font-weight: 300;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
 
         .game-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 15px;
             width: 100%;
-            min-height: 100vh;
+            max-width: 600px; /* Omezení šířky na desktopu */
             padding: 10px;
-            padding-bottom: 40px;
+            padding-bottom: 50px;
             box-sizing: border-box;
-            justify-content: flex-start;
         }
 
-        .controls {
+        /* --- UI Components (Glassmorphism) --- */
+        
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .settings {
             display: flex;
-            gap: 8px;
+            gap: 15px;
+            align-items: center;
+            font-size: 0.9rem;
             flex-wrap: wrap;
             justify-content: center;
+            padding: 10px 20px;
             width: 100%;
-            margin-bottom: 10px;
+            box-sizing: border-box;
         }
-
-        button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 0.9rem;
-            transition: opacity 0.2s;
+        
+        select, input {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.3);
             color: white;
+            font-family: inherit;
+            outline: none;
         }
-
-        button:hover { opacity: 0.9; }
-        .btn-primary { background-color: var(--accent); }
-        .btn-danger { background-color: var(--danger); }
-        .btn-secondary { background-color: #666; }
-        .btn-online { background-color: var(--blue); }
 
         .status-bar {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             width: 100%;
-            max-width: 500px;
-            background: #333;
-            padding: 8px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            padding: 12px 20px;
             box-sizing: border-box;
-            font-size: 0.9rem;
         }
 
         .player-info {
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 45%;
+            width: 40%;
+            transition: all 0.3s ease;
+            opacity: 0.6;
+        }
+
+        .player-info.active-turn {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+        
+        .player-name {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
         }
 
         .timer {
-            font-family: 'Courier New', monospace;
-            font-size: 1.2rem;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 1.4rem;
             font-weight: bold;
-            background: #000;
-            color: #f00;
-            padding: 2px 8px;
-            border-radius: 4px;
-            margin-top: 4px;
-            min-width: 70px;
+            color: #fff;
+            padding: 4px 10px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 6px;
+            border-bottom: 2px solid transparent;
+            min-width: 80px;
             text-align: center;
         }
 
         .active-turn .timer {
-            color: #0f0;
-            box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+            border-bottom-color: var(--accent);
+            box-shadow: 0 0 15px rgba(102, 187, 106, 0.2);
         }
+
+        /* --- Šachovnice --- */
 
         .board-wrapper {
             position: relative;
-            width: min(95vw, 55vh);
-            height: min(95vw, 55vh); 
+            width: min(92vw, 55vh);
+            height: min(92vw, 55vh); 
             aspect-ratio: 1 / 1;
             margin: 5px auto;
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
         .board {
@@ -129,7 +172,8 @@
             grid-template-rows: repeat(8, 1fr);
             width: 100%;
             height: 100%;
-            border: 4px solid var(--board-border);
+            border: 6px solid var(--board-border);
+            border-radius: 4px;
             box-sizing: border-box;
             background: var(--board-border);
         }
@@ -140,7 +184,8 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: calc(min(95vw, 55vh) / 9); 
+            /* Velikost fontu pro figury */
+            font-size: calc(min(92vw, 55vh) / 9); 
             cursor: pointer;
             position: relative;
             overflow: hidden;
@@ -149,6 +194,7 @@
         .square.light { background-color: var(--light-square); color: black; }
         .square.dark { background-color: var(--dark-square); color: black; }
         
+        /* Figury */
         .piece {
             z-index: 2;
             pointer-events: none;
@@ -158,18 +204,22 @@
             justify-content: center;
             align-items: center;
             line-height: 1;
+            /* Vylepšený stín pro lepší 3D efekt */
+            filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4));
         }
-        .piece.white { color: #fff; text-shadow: 0 0 2px #000, 1px 1px 2px rgba(0,0,0,0.5); }
-        .piece.black { color: #000; text-shadow: 0 0 2px #fff, 1px 1px 2px rgba(255,255,255,0.5); }
+        .piece.white { color: #fdfdfd; text-shadow: 0 0 1px #000; }
+        .piece.black { color: #1a1a1a; text-shadow: 0 0 1px #fff; }
 
         .square.selected { background-color: var(--selected) !important; }
-        .square.last-move { background-color: rgba(255, 255, 0, 0.3) !important; }
+        .square.last-move { background-color: var(--highlight) !important; }
+        .square.check { background: var(--check-color); }
         
+        /* Indikátory tahů */
         .hint-dot {
             position: absolute;
-            width: 25%;
-            height: 25%;
-            background-color: rgba(0, 0, 0, 0.2);
+            width: 18%;
+            height: 18%;
+            background-color: rgba(0, 0, 0, 0.3);
             border-radius: 50%;
             z-index: 1;
         }
@@ -179,35 +229,74 @@
             position: absolute;
             width: 85%;
             height: 85%;
-            border: 4px solid rgba(0, 0, 0, 0.2);
+            border: 5px solid rgba(0, 0, 0, 0.3);
             border-radius: 50%;
             box-sizing: border-box;
             z-index: 1;
         }
 
-        .square.check {
-            background: radial-gradient(circle, rgba(255,0,0,0.8) 0%, transparent 70%);
+        /* --- Ovládání --- */
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            margin-top: 5px;
         }
 
-        /* Modal */
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 50px; /* Pill shape */
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: transform 0.1s, box-shadow 0.2s, background-color 0.2s;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        button:active { transform: scale(0.96); }
+        button:hover { filter: brightness(1.1); box-shadow: 0 6px 12px rgba(0,0,0,0.3); }
+        
+        .btn-primary { background-color: var(--accent); }
+        .btn-danger { background-color: var(--danger); }
+        .btn-secondary { background-color: var(--secondary); }
+        .btn-online { background-color: var(--blue); }
+
+        /* --- Modals & Status --- */
+
+        .online-status {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: var(--blue);
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(66, 165, 245, 0.3);
+        }
+        
         .modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
             z-index: 100;
             justify-content: center;
             align-items: center;
         }
         
         .modal-content {
-            background: var(--bg-color);
-            padding: 20px;
-            border-radius: 8px;
+            padding: 30px;
             text-align: center;
-            border: 1px solid #555;
             max-width: 90%;
+            width: 350px;
         }
+        
+        .modal-content h2 { margin-top: 0; color: var(--accent); }
 
         .promotion-options {
             display: flex;
@@ -219,54 +308,33 @@
         .promo-piece {
             font-size: 3rem;
             cursor: pointer;
-            padding: 5px 15px;
-            background: #444;
-            border-radius: 8px;
-            transition: transform 0.1s;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            transition: transform 0.2s, background 0.2s;
         }
-        .promo-piece:hover { background: #666; transform: scale(1.1); }
+        .promo-piece:hover { background: rgba(255,255,255,0.2); transform: translateY(-5px); }
 
-        .settings {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            font-size: 0.8rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        
-        select, input {
-            padding: 4px;
-            border-radius: 4px;
-            border: 1px solid #555;
-            background: #444;
-            color: white;
-        }
-
-        /* Online UI styles */
-        .online-status {
-            font-size: 0.8rem;
-            color: var(--blue);
-            margin-bottom: 5px;
-            height: 1.2em;
-        }
-        
         .id-display {
-            font-family: monospace;
-            background: #000;
-            padding: 5px;
-            border-radius: 4px;
-            color: #fff;
-            margin: 10px 0;
+            font-family: 'Monaco', monospace;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 8px;
+            color: #81d4fa;
+            margin: 15px 0;
             user-select: text;
+            font-size: 1.1rem;
+            border: 1px dashed rgba(255,255,255,0.2);
         }
 
+        /* Large screens */
         @media (min-width: 600px) {
             .board-wrapper {
                 width: 500px;
                 height: 500px;
             }
             .square { font-size: 55px; }
+            h1 { font-size: 2.2rem; }
         }
     </style>
 </head>
@@ -277,7 +345,8 @@
         
         <div class="online-status" id="onlineStatus">Offline</div>
 
-        <div class="settings">
+        <!-- Glass Panel pro nastavení -->
+        <div class="settings glass-panel">
             <label>Režim:
                 <select id="gameMode" onchange="game.changeMode()">
                     <option value="pvp">Hráč vs Hráč (Zde)</option>
@@ -285,24 +354,26 @@
                     <option value="online">Hráč vs Hráč (Online)</option>
                 </select>
             </label>
-            <label>Čas (min):
-                <input type="number" id="timeControl" value="10" min="1" max="60" style="width: 40px;">
+            <label>Čas:
+                <input type="number" id="timeControl" value="10" min="1" max="60" style="width: 45px; text-align: center;"> min
             </label>
         </div>
 
-        <div class="status-bar">
+        <!-- Glass Panel pro status bar -->
+        <div class="status-bar glass-panel">
             <div class="player-info" id="black-info">
-                <span>Černý</span>
+                <span class="player-name">Černý</span>
                 <div class="timer" id="timer-b">10:00</div>
             </div>
-            <div style="display: flex; align-items: center; font-weight: bold; font-size: 1.2rem; color: #666;">VS</div>
+            <!-- VS element -->
+            <div style="font-weight: 900; font-size: 1.2rem; color: rgba(255,255,255,0.2);">VS</div>
             <div class="player-info active-turn" id="white-info">
-                <span>Bílý</span>
+                <span class="player-name">Bílý</span>
                 <div class="timer" id="timer-w">10:00</div>
             </div>
         </div>
         
-        <div id="statusText" style="color: #ccc; font-style: italic; min-height: 20px; text-align: center; margin: 2px 0; font-size: 0.9rem;">
+        <div id="statusText" style="color: #bbb; font-style: italic; min-height: 24px; text-align: center; margin: 5px 0; font-size: 0.95rem;">
             Na tahu je bílý
         </div>
 
@@ -315,14 +386,13 @@
         <div class="controls">
             <button class="btn-primary" onclick="game.startNewGame()">Nová hra</button>
             <button class="btn-secondary" onclick="game.undoMove()">Zpět</button>
-            <button class="btn-online" id="btnOnline" style="display:none" onclick="onlineManager.showMenu()">Online Menu</button>
-            <!-- <button class="btn-danger" onclick="game.resign()">Vzdát se</button> -->
+            <button class="btn-online" id="btnOnline" style="display:none" onclick="onlineManager.showMenu()">Online</button>
         </div>
     </div>
 
     <!-- Promotion Modal -->
     <div id="promotionModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content glass-panel">
             <h2>Proměna pěšce</h2>
             <p>Vyberte novou figuru:</p>
             <div class="promotion-options" id="promoOptions"></div>
@@ -331,23 +401,33 @@
 
     <!-- Online Modal -->
     <div id="onlineModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content glass-panel">
             <h2>Online Hra</h2>
             <div id="onlineMenuInitial">
-                <button class="btn-primary" onclick="onlineManager.hostGame()">Založit hru (Bílý)</button>
-                <br><br>
-                <input type="text" id="joinInput" placeholder="Zadejte ID soupeře" style="width: 150px; text-align: center;">
-                <button class="btn-online" onclick="onlineManager.joinGame()">Připojit se (Černý)</button>
+                <button class="btn-primary" style="width: 100%; margin-bottom: 10px;" onclick="onlineManager.hostGame()">Založit hru (Bílý)</button>
+                <div style="margin: 15px 0; font-size: 0.9rem; opacity: 0.7;">— NEBO —</div>
+                <input type="text" id="joinInput" placeholder="Zadejte kód soupeře" style="width: 80%; text-align: center; margin-bottom: 10px; font-size: 1rem; padding: 10px;">
+                <button class="btn-online" style="width: 100%;" onclick="onlineManager.joinGame()">Připojit se (Černý)</button>
             </div>
             <div id="onlineMenuHost" style="display:none">
                 <p>Pošlete tento kód kamarádovi:</p>
                 <div class="id-display" id="myIdDisplay">Generuji...</div>
-                <p>Čekám na soupeře...</p>
+                <div style="font-size: 0.9rem; color: #aaa; margin-top: 10px;">
+                    <span style="display: inline-block; animation: pulse 1.5s infinite;">●</span> Čekám na soupeře...
+                </div>
             </div>
             <br>
-            <button class="btn-secondary" onclick="document.getElementById('onlineModal').style.display='none'">Zavřít</button>
+            <button class="btn-secondary" style="margin-top: 10px;" onclick="document.getElementById('onlineModal').style.display='none'">Zavřít</button>
         </div>
     </div>
+
+    <style>
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+    </style>
 
 <script>
 /**
@@ -461,7 +541,7 @@ class OnlineManager {
 
     setupConnection() {
         document.getElementById('onlineStatus').innerText = "Online: Připojeno";
-        document.getElementById('onlineStatus').style.color = "#0f0";
+        document.getElementById('onlineStatus').style.color = "#66bb6a"; // Accent green
         
         this.conn.on('data', (data) => {
             if (data.type === 'move') {
