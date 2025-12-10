@@ -431,7 +431,8 @@
         </div>
 
         <div class="controls">
-            <button class="btn-primary" onclick="game.startNewGame()">Nová hra</button>
+            <!-- Aktualizované tlačítko pro Novou hru s voláním hlasu -->
+            <button class="btn-primary" onclick="game.startNewGame(false, true)">Nová hra</button>
             <button class="btn-secondary" onclick="game.undoMove()">Zpět</button>
             <button class="btn-online" id="btnOnline" style="display:none" onclick="onlineManager.showMenu()">Online</button>
         </div>
@@ -479,7 +480,7 @@ const PIECES = {
 
 const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
-/* Upravený SoundFX pro Stitch zvuky */
+/* Upravený SoundFX pro Stitch zvuky a Mluvení */
 const SoundFX = {
     ctx: null,
     init: function() {
@@ -510,6 +511,17 @@ const SoundFX = {
         gain.connect(this.ctx.destination);
         osc.start();
         osc.stop(this.ctx.currentTime + duration);
+    },
+    // Hlasová syntéza (Mluvení)
+    speak: function(text) {
+        if ('speechSynthesis' in window) {
+            // Zrušit předchozí, pokud mluví
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'cs-CZ';
+            utter.rate = 0.9; // Trochu pomalejší pro lepší srozumitelnost
+            window.speechSynthesis.speak(utter);
+        }
     },
     // Tah: Mimozemské cvrliknutí (jako Stitchova řeč)
     move: function() { 
@@ -692,9 +704,14 @@ class ChessGame {
         }
     }
 
-    startNewGame(isRemoteTrigger = false) {
+    startNewGame(isRemoteTrigger = false, speakQuote = false) {
         if (this.mode === 'online' && !isRemoteTrigger) {
             onlineManager.sendRestart();
+        }
+        
+        // Přehrát citát, pokud je vyžádáno (při kliknutí na tlačítko)
+        if (speakQuote) {
+            SoundFX.speak("Ohaaaanaaaaa, jde se na to bejby.");
         }
         
         clearInterval(this.timerInterval);
@@ -952,6 +969,12 @@ class ChessGame {
     endGame(winner, reason) {
         this.gameOver = true;
         clearInterval(this.timerInterval);
+        
+        // Přehrát zvuk O ou při matu
+        if (reason === 'Mat!') {
+            SoundFX.speak("O ou");
+        }
+
         const text = winner === 'draw' ? reason : `${reason} Vítěz: ${winner === 'w' ? 'Bílý' : 'Černý'}`;
         document.getElementById('statusText').innerText = text;
         if (winner !== 'draw') {
@@ -959,7 +982,7 @@ class ChessGame {
              const kIdx = this.board.indexOf(loserColor === 'w' ? 'K' : 'k');
              if(kIdx !== -1) document.querySelectorAll('.square')[kIdx].classList.add('check');
         }
-        setTimeout(() => alert(text), 100);
+        setTimeout(() => alert(text), 500); // Mírné zpoždění, aby stihlo zaznít O ou
     }
 
     updateStatusUI() {
