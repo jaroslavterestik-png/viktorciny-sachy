@@ -711,7 +711,7 @@ class ChessGame {
         
         // Přehrát citát, pokud je vyžádáno (při kliknutí na tlačítko)
         if (speakQuote) {
-            SoundFX.speak("Ohaaaanaaaaa, jde se na to bejby.");
+            SoundFX.speak("Ohana, hra začíná. Hodně štěstí ve hře.");
         }
         
         clearInterval(this.timerInterval);
@@ -972,7 +972,7 @@ class ChessGame {
         
         // Přehrát zvuk O ou při matu
         if (reason === 'Mat!') {
-            SoundFX.speak("O ou");
+            SoundFX.speak("ŠACH MAT, ZKUS TO ZNOVU");
         }
 
         const text = winner === 'draw' ? reason : `${reason} Vítěz: ${winner === 'w' ? 'Bílý' : 'Černý'}`;
