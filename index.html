@@ -1,38 +1,819 @@
-/* --- Figury: kontrast podle barvy pole --- */
-/* Zajistí, že na světlém poli budou figurky tmavé a na tmavém poli světlé.
-   Tím se odstraní problém 'bílá na bílé'. */
-.piece {
-    z-index: 2;
-    pointer-events: none;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    line-height: 1;
-    filter: drop-shadow(2px 3px 2px rgba(0,0,0,0.5));
-    /* font pro unicode šachové znaky (bezpečnější fallbacky) */
-    font-family: 'Segoe UI Symbol', 'Noto Color Emoji', 'Apple Color Emoji', 'DejaVu Sans', 'Symbola', sans-serif;
-    user-select: none;
-}
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Viktorčiny šachy</title>
 
-/* Na světlých polích: tmavé figurky pro dobrou čitelnost */
-.square.light .piece {
-    color: #111; /* tmavá */
-    text-shadow: 0 1px 0 rgba(255,255,255,0.15);
-}
+    <!-- chess.js – pravidla a validace tahů (FIDE) -->
+    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.13.4/chess.min.js"></script>
 
-/* Na tmavých polích: světlé figurky s jemným stínem */
-.square.dark .piece {
-    color: #fff; /* světlá */
-    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-}
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle at center, #2b5585 0%, #0f1c30 100%);
+            --board-border: #5d4037;
+            --light-square: #fff8e1;
+            --dark-square: #8d6e63;
 
-/* Pokud chcete zachovat původní barevné rozlišení (bílá/černá), 
-   můžete použít tyto pomocné třídy — ale kontrast podle pole má přednost. */
-.piece.white { /* neškodí pokud zůstane */
-    /* barva bude přepsána selektory výše */
-}
-.piece.black {
-    /* barva bude přepsána selektory výše */
-}
+            --highlight: rgba(100, 255, 218, 0.6);
+            --selected: rgba(64, 196, 255, 0.7);
+            --check-color: radial-gradient(circle, #ff4081 0%, transparent 70%);
+
+            --text-color: #e3f2fd;
+            --panel-bg: rgba(13, 71, 161, 0.4);
+            --panel-border: rgba(64, 196, 255, 0.3);
+
+            --accent: #00b0ff;
+            --danger: #f50057;
+            --secondary: #5c6bc0;
+
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --radius: 20px;
+        }
+
+        body {
+            font-family: 'Comic Sans MS', 'Chalkboard SE', 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-gradient);
+            background-image: url('https://wallpaperaccess.com/full/213606.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-blend-mode: overlay;
+
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            overflow-y: auto;
+        }
+
+        h1 {
+            margin: 15px 0 10px 0;
+            font-size: 2.2rem;
+            text-align: center;
+            font-weight: bold;
+            color: #82b1ff;
+            text-shadow: 2px 2px 0px #0d47a1, 0 0 10px #40c4ff;
+            letter-spacing: 2px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            max-width: 600px;
+            padding: 10px;
+            padding-bottom: 50px;
+            box-sizing: border-box;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 2px solid var(--panel-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .settings {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            font-size: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            padding: 15px 20px;
+            width: 100%;
+            box-sizing: border-box;
+            font-weight: bold;
+        }
+
+        select, input {
+            padding: 8px 15px;
+            border-radius: 20px;
+            border: 2px solid #82b1ff;
+            background: rgba(13, 71, 161, 0.6);
+            color: white;
+            font-family: inherit;
+            outline: none;
+            font-weight: bold;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding: 15px 25px;
+            box-sizing: border-box;
+        }
+
+        .player-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 40%;
+            transition: all 0.3s ease;
+            opacity: 0.7;
+        }
+
+        .player-info.active-turn {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .player-name {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            color: #80d8ff;
+            text-shadow: 0 0 5px #0091ea;
+        }
+
+        .timer {
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #fff;
+            padding: 5px 12px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            border: 2px solid #2962ff;
+            min-width: 90px;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(41, 98, 255, 0.3);
+        }
+
+        .active-turn .timer {
+            border-color: #00e5ff;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
+            color: #e0f7fa;
+        }
+
+        .board-wrapper {
+            position: relative;
+            width: min(92vw, 55vh);
+            height: min(92vw, 55vh);
+            aspect-ratio: 1 / 1;
+            margin: 10px auto;
+            border-radius: 8px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6),
+                        0 0 20px rgba(64, 196, 255, 0.2);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            width: 100%;
+            height: 100%;
+            border: 8px solid var(--board-border);
+            border-radius: 8px;
+            box-sizing: border-box;
+            background: var(--board-border);
+        }
+
+        .square {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: calc(min(92vw, 55vh) / 9);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .square.light { background-color: var(--light-square); }
+        .square.dark  { background-color: var(--dark-square); }
+
+        /* Figury – kontrast vůči poli */
+        .piece {
+            z-index: 2;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 1;
+            filter: drop-shadow(2px 3px 2px rgba(0,0,0,0.5));
+            font-family: 'Segoe UI Symbol', 'Noto Color Emoji',
+                         'Apple Color Emoji', 'DejaVu Sans', 'Symbola',
+                         sans-serif;
+            user-select: none;
+        }
+
+        .square.light .piece {
+            color: #111;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.15);
+        }
+
+        .square.dark .piece {
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        }
+
+        .square.selected  { background-color: var(--selected) !important; }
+        .square.last-move { background-color: var(--highlight) !important; }
+        .square.check     { background: var(--check-color); }
+
+        .hint-dot {
+            position: absolute;
+            width: 20%;
+            height: 20%;
+            background-color: rgba(13, 71, 161, 0.4);
+            border-radius: 50%;
+            z-index: 1;
+        }
+
+        .square.capture-hint::after {
+            content: '';
+            position: absolute;
+            width: 85%;
+            height: 85%;
+            border: 5px solid rgba(255, 64, 129, 0.5);
+            border-radius: 50%;
+            box-sizing: border-box;
+            z-index: 1;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: all 0.2s;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            font-family: inherit;
+        }
+
+        button:active { transform: scale(0.95); }
+        button:hover  {
+            filter: brightness(1.2);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary   { background: linear-gradient(135deg, #00b0ff, #2979ff); }
+        .btn-secondary { background: linear-gradient(135deg, #78909c, #455a64); }
+
+        .online-status {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #84ffff;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(132, 255, 255, 0.5);
+            background: rgba(0,0,0,0.3);
+            padding: 5px 15px;
+            border-radius: 15px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 25, 50, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            padding: 30px;
+            text-align: center;
+            max-width: 90%;
+            width: 350px;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            color: #40c4ff;
+            text-shadow: 0 0 10px rgba(64,196,255,0.5);
+        }
+
+        .promotion-options {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .promo-piece {
+            font-size: 3rem;
+            cursor: pointer;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            transition: transform 0.2s, background 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .promo-piece:hover {
+            background: rgba(64, 196, 255, 0.2);
+            transform: translateY(-5px) rotate(5deg);
+            border-color: #40c4ff;
+        }
+
+        @media (min-width: 600px) {
+            .board-wrapper { width: 500px; height: 500px; }
+            .square        { font-size: 55px; }
+            h1             { font-size: 2.5rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <h1>Viktorčiny šachy</h1>
+
+    <div class="online-status" id="onlineStatus">Offline</div>
+
+    <div class="settings glass-panel">
+        <label>Režim:
+            <select id="gameMode" onchange="game.changeMode()">
+                <option value="pvp">Hráč vs Hráč (místní)</option>
+                <option value="pva" selected>Hráč vs AI</option>
+            </select>
+        </label>
+        <label>Čas:
+            <input type="number" id="timeControl" value="10" min="1" max="60"
+                   style="width: 45px; text-align: center;"> min
+        </label>
+    </div>
+
+    <div class="status-bar glass-panel">
+        <div class="player-info" id="black-info">
+            <span class="player-name">Černý</span>
+            <div class="timer" id="timer-b">10:00</div>
+        </div>
+        <div style="font-weight: 900; font-size: 1.2rem; color: rgba(255,255,255,0.4);">VS</div>
+        <div class="player-info active-turn" id="white-info">
+            <span class="player-name">Bílý</span>
+            <div class="timer" id="timer-w">10:00</div>
+        </div>
+    </div>
+
+    <div id="statusText"
+         style="color: #b3e5fc; font-style: italic; min-height: 24px; text-align: center;
+                margin: 5px 0; font-size: 1rem; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">
+        Na tahu je bílý
+    </div>
+
+    <div class="board-wrapper">
+        <div class="board" id="board"></div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-primary" onclick="game.startNewGame()">Nová hra</button>
+        <button class="btn-secondary" onclick="game.undoMove()">Zpět</button>
+    </div>
+</div>
+
+<!-- Modal pro proměnu pěšce -->
+<div id="promotionModal" class="modal">
+    <div class="modal-content glass-panel">
+        <h2>Proměna pěšce</h2>
+        <p>Vyberte novou figuru:</p>
+        <div class="promotion-options" id="promoOptions"></div>
+    </div>
+</div>
+
+<script>
+    const PIECE_SYMBOLS = {
+        w: {k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙'},
+        b: {k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟'}
+    };
+
+    const SoundFX = {
+        ctx: null,
+        init() {
+            try {
+                if (!this.ctx)
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            } catch (e) {}
+        },
+        playTone(freq, type, duration) {
+            try {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            } catch (e) {}
+        },
+        move()    { this.init(); this.playTone(320, 'sine', 0.08); },
+        capture() { this.init(); this.playTone(180, 'square', 0.12); },
+        check()   { this.init(); this.playTone(720, 'triangle', 0.22); }
+    };
+
+    const game = {
+        chess: null,
+        boardEl: null,
+        selectedSquare: null,
+        pendingPromotion: null,
+        lastMoveSquares: [],
+        moveHistory: [],
+        mode: 'pva', // pvp | pva
+        timers: {w: 0, b: 0},
+        timerInterval: null,
+        timeOut: false,
+
+        init() {
+            this.boardEl = document.getElementById('board');
+            this.chess = new Chess();
+            this.generateBoard();
+            this.initPromotionModal();
+            this.startNewGame();
+        },
+
+        changeMode() {
+            const select = document.getElementById('gameMode');
+            this.mode = select.value;
+            this.startNewGame();
+        },
+
+        generateBoard() {
+            this.boardEl.innerHTML = '';
+            const files = ['a','b','c','d','e','f','g','h'];
+
+            for (let rank = 8; rank >= 1; rank--) {
+                for (let f = 0; f < 8; f++) {
+                    const sq = files[f] + rank;
+                    const div = document.createElement('div');
+                    const light = (f + rank) % 2 === 0;
+                    div.className = 'square ' + (light ? 'light' : 'dark');
+                    div.dataset.square = sq;
+                    div.addEventListener('click', () => game.onSquareClick(sq));
+                    this.boardEl.appendChild(div);
+                }
+            }
+        },
+
+        render() {
+            // vyčistit
+            const squares = this.boardEl.querySelectorAll('.square');
+            squares.forEach(sq => {
+                sq.classList.remove('selected','last-move','check','capture-hint');
+                sq.innerHTML = '';
+            });
+
+            // figury podle FEN
+            const board = this.chess.board();
+            const files = ['a','b','c','d','e','f','g','h'];
+
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const piece = board[r][f];
+                    if (!piece) continue;
+                    const rank = 8 - r;
+                    const file = files[f];
+                    const sq = file + rank;
+                    const el = this.boardEl.querySelector(`[data-square="${sq}"]`);
+                    if (!el) continue;
+
+                    const div = document.createElement('div');
+                    div.className = 'piece';
+                    div.innerText = PIECE_SYMBOLS[piece.color][piece.type];
+                    el.appendChild(div);
+                }
+            }
+
+            // poslední tah
+            if (this.lastMoveSquares.length === 2) {
+                this.boardEl.querySelector(`[data-square="${this.lastMoveSquares[0]}"]`)?.classList.add('last-move');
+                this.boardEl.querySelector(`[data-square="${this.lastMoveSquares[1]}"]`)?.classList.add('last-move');
+            }
+
+            // šach
+            if (this.chess.in_check()) {
+                const kingSq = this.findKingSquare(this.chess.turn());
+                if (kingSq) {
+                    this.boardEl.querySelector(`[data-square="${kingSq}"]`)?.classList.add('check');
+                    SoundFX.check();
+                }
+            }
+
+            // status text
+            const statusEl = document.getElementById('statusText');
+            if (this.chess.in_checkmate()) {
+                statusEl.innerText = `Mat – vyhrává ${this.chess.turn() === 'w' ? 'černý' : 'bílý'}`;
+            } else if (this.chess.in_draw()) {
+                statusEl.innerText = 'Remíza';
+            } else if (this.timeOut) {
+                // text nastavíme v timeru
+            } else {
+                statusEl.innerText = `Na tahu je ${this.chess.turn() === 'w' ? 'bílý' : 'černý'}`;
+            }
+
+            // indikace hráče na tahu
+            document.getElementById('white-info')
+                .classList.toggle('active-turn', this.chess.turn() === 'w');
+            document.getElementById('black-info')
+                .classList.toggle('active-turn', this.chess.turn() === 'b');
+        },
+
+        findKingSquare(color) {
+            const board = this.chess.board();
+            const files = ['a','b','c','d','e','f','g','h'];
+
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const p = board[r][f];
+                    if (p && p.type === 'k' && p.color === color) {
+                        const rank = 8 - r;
+                        const file = files[f];
+                        return file + rank;
+                    }
+                }
+            }
+            return null;
+        },
+
+        onSquareClick(square) {
+            if (this.chess.game_over() || this.timeOut) return;
+
+            // v režimu Hráč vs AI táhne člověk jen bílými
+            if (this.mode === 'pva' && this.chess.turn() === 'b') return;
+
+            if (this.pendingPromotion) return;
+
+            const piece = this.chess.get(square);
+
+            if (!this.selectedSquare) {
+                if (!piece) return;
+                if (piece.color !== this.chess.turn()) return;
+
+                this.selectedSquare = square;
+                this.highlightMoves(square);
+            } else {
+                if (this.selectedSquare === square) {
+                    this.clearHighlights();
+                    this.selectedSquare = null;
+                    return;
+                }
+
+                const fromPiece = this.chess.get(this.selectedSquare);
+
+                // klik na jinou vlastní figuru -> změna výběru
+                if (piece && fromPiece && piece.color === fromPiece.color && piece.color === this.chess.turn()) {
+                    this.clearHighlights();
+                    this.selectedSquare = square;
+                    this.highlightMoves(square);
+                    return;
+                }
+
+                // proměna?
+                const destRank = parseInt(square[1], 10);
+                const isPromotion = fromPiece && fromPiece.type === 'p' &&
+                    (destRank === 8 || destRank === 1);
+
+                if (isPromotion) {
+                    this.pendingPromotion = { from: this.selectedSquare, to: square };
+                    document.getElementById('promotionModal').style.display = 'flex';
+                    return;
+                }
+
+                const move = this.chess.move({
+                    from: this.selectedSquare,
+                    to: square,
+                    promotion: 'q'
+                });
+
+                if (move) {
+                    this.afterMove(move);
+                } else {
+                    this.clearHighlights();
+                }
+                this.selectedSquare = null;
+            }
+        },
+
+        highlightMoves(square) {
+            this.clearHighlights();
+
+            const el = this.boardEl.querySelector(`[data-square="${square}"]`);
+            if (el) el.classList.add('selected');
+
+            const moves = this.chess.moves({ square, verbose: true });
+            moves.forEach(m => {
+                const target = this.boardEl.querySelector(`[data-square="${m.to}"]`);
+                if (!target) return;
+
+                if (m.captured) {
+                    target.classList.add('capture-hint');
+                } else {
+                    const dot = document.createElement('div');
+                    dot.className = 'hint-dot';
+                    target.appendChild(dot);
+                }
+            });
+        },
+
+        clearHighlights() {
+            const squares = this.boardEl.querySelectorAll('.square');
+            squares.forEach(sq => {
+                sq.classList.remove('selected','capture-hint');
+                const dot = sq.querySelector('.hint-dot');
+                if (dot) dot.remove();
+            });
+        },
+
+        afterMove(move) {
+            this.moveHistory.push(move);
+            this.lastMoveSquares = [move.from, move.to];
+
+            if (move.captured) SoundFX.capture();
+            else SoundFX.move();
+
+            this.clearHighlights();
+            this.render();
+
+            if (!this.chess.game_over() && this.mode === 'pva' && this.chess.turn() === 'b') {
+                setTimeout(() => this.aiMove(), 300);
+            }
+        },
+
+        aiMove() {
+            if (this.chess.game_over()) return;
+            const moves = this.chess.moves({verbose:true});
+            if (!moves.length) return;
+
+            // jednoduchá AI – náhodný tah
+            const move = moves[Math.floor(Math.random() * moves.length)];
+            const result = this.chess.move(move);
+            if (result) {
+                this.afterMove(result);
+            }
+        },
+
+        startNewGame() {
+            this.chess.reset();
+            this.selectedSquare = null;
+            this.pendingPromotion = null;
+            this.lastMoveSquares = [];
+            this.moveHistory = [];
+            this.timeOut = false;
+
+            // nastavení časomíry
+            const minutes = parseInt(document.getElementById('timeControl').value, 10) || 10;
+            this.timers.w = minutes * 60;
+            this.timers.b = minutes * 60;
+
+            this.updateTimerDisplay();
+            this.stopTimer();
+            this.startTimer();
+
+            this.render();
+        },
+
+        undoMove() {
+            if (!this.moveHistory.length) return;
+
+            if (this.mode === 'pva') {
+                // v režimu proti AI vrátíme tah hráče i tah AI (pokud existuje)
+                this.chess.undo();
+                this.moveHistory.pop();
+                if (this.moveHistory.length) {
+                    this.chess.undo();
+                    this.moveHistory.pop();
+                }
+            } else {
+                this.chess.undo();
+                this.moveHistory.pop();
+            }
+
+            this.lastMoveSquares = [];
+            this.selectedSquare = null;
+            this.pendingPromotion = null;
+            this.clearHighlights();
+            this.render();
+        },
+
+        initPromotionModal() {
+            const promoWrap = document.getElementById('promoOptions');
+            const pieces = ['q','r','b','n'];
+
+            promoWrap.innerHTML = '';
+            pieces.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'promo-piece';
+                el.dataset.piece = p;
+                el.innerText = PIECE_SYMBOLS.w[p];
+                el.addEventListener('click', () => game.applyPromotion(p));
+                promoWrap.appendChild(el);
+            });
+
+            const modal = document.getElementById('promotionModal');
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    game.pendingPromotion = null;
+                    modal.style.display = 'none';
+                }
+            });
+        },
+
+        applyPromotion(pieceType) {
+            if (!this.pendingPromotion) return;
+            const { from, to } = this.pendingPromotion;
+
+            const move = this.chess.move({
+                from,
+                to,
+                promotion: pieceType
+            });
+
+            if (move) {
+                this.afterMove(move);
+            }
+
+            this.pendingPromotion = null;
+            document.getElementById('promotionModal').style.display = 'none';
+            this.selectedSquare = null;
+        },
+
+        startTimer() {
+            if (this.timerInterval) clearInterval(this.timerInterval);
+            this.timerInterval = setInterval(() => this.tick(), 1000);
+        },
+
+        stopTimer() {
+            if (this.timerInterval) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+            }
+        },
+
+        tick() {
+            if (this.chess.game_over() || this.timeOut) {
+                this.stopTimer();
+                return;
+            }
+
+            const turn = this.chess.turn();
+            this.timers[turn]--;
+
+            if (this.timers[turn] <= 0) {
+                this.timers[turn] = 0;
+                this.timeOut = true;
+                this.stopTimer();
+                const winner = turn === 'w' ? 'černý' : 'bílý';
+                document.getElementById('statusText').innerText =
+                    `Vypršel čas – vyhrává ${winner}`;
+                alert(`Vypršel čas – vyhrává ${winner}`);
+            }
+
+            this.updateTimerDisplay();
+        },
+
+        updateTimerDisplay() {
+            const fmt = (s) => {
+                const m = Math.floor(s / 60).toString().padStart(2,'0');
+                const sec = (s % 60).toString().padStart(2,'0');
+                return `${m}:${sec}`;
+            };
+
+            document.getElementById('timer-w').innerText = fmt(this.timers.w);
+            document.getElementById('timer-b').innerText = fmt(this.timers.b);
+        }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('onlineStatus').innerText = 'Offline (místní hra)';
+        game.init();
+    });
+</script>
+</body>
+</html>
